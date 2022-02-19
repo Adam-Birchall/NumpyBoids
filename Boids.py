@@ -25,8 +25,8 @@ try:
     MODE = modes[sys.argv[1]]
 except IndexError:
     # MODE = 'FILE_SAVE'
-    # MODE = 'REAL_TIME'
-    MODE = 'DEBUG'
+    MODE = 'REAL_TIME'
+    # MODE = 'DEBUG'
 except KeyError:
     # Running in vs code
     MODE = 'VSCODE_DEBUG'
