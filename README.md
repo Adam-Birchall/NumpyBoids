@@ -6,7 +6,8 @@ type: project-readme
 An attempt at boids flocking without iterating over individual boids, but rather by using matrix math.
 
 # Bugs
-1. Edge interaction behaviour is bad - Boids can get stuck on the edges
+1. Speed vaiance has an impact on all the other factors due to method of implementation.
+
 
 # Improvements
 1. Short term

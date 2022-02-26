@@ -1,353 +1,108 @@
 #!/usr/bin/python3
 # 2022-02-19
 
-# Boids 1.0
-# A roughly working version.
-# still some bugs with edges, and motion becomes a predictable
-# swirl with i think is unavoidable...
+# Boids
+# Motion becomes a predictable swirl under some input params which I think is
+# unavoidable
+# The alighnment, cohesion andseparation are all handeled the in flock 
+# function, in the Flocking file.
 
 # %%
 import numpy as np
+from Flocking import flock
 from matplotlib import pyplot as plt
 from matplotlib import animation
+from matplotlib.widgets import Slider, CheckButtons
 
 # %%
 # Initialisation:
 
-# Commnad line args for mode:
-import sys
-try:
-    modes = {
-        '0': 'FILE_SAVE',
-        '1': 'REAL_TIME',
-        '2': 'DEBUG'
-    }
-    MODE = modes[sys.argv[1]]
-except IndexError:
-    # MODE = 'FILE_SAVE'
-    MODE = 'REAL_TIME'
-    # MODE = 'DEBUG'
-except KeyError:
-    # Running in vs code
-    MODE = 'VSCODE_DEBUG'
-    np.set_printoptions(precision=2)
+initial_speed = 0.04
+inital_influence_prox = .5
 
-influence_prox = .5
-speed = 0.04
+map_size = 10
 
-map_size = 20
+inital_alignment_factor = 0.1
+inital_cohesion_factor = 0.5
+inital_separation_factor = 0.01
+
 number = 200
-
-alignment_factor = 0.1
-cohesion_factor = 0.01
-separation_factor = 0.05
-
 positions = np.random.rand(number, 2) * map_size
 velocities = (np.random.rand(number, 2) * 2) - 1
 
-# # Super debug mode:
-# positions = np.array([[1, map_size/2], [4, map_size/2], ])
-# velocities = np.array([[1.0, 0], [-1, 0], ])
+slider_visible = False
 
 # %%
-def algo(pos, vel, debug=False):
-    """ Main algo for update boid positions and velocities"""
+fig = plt.figure(figsize=(7, 7))
+ax = fig.add_axes([0, 0, 1, 1])
+ax.axis('off')
+ax.set_xlim(0, map_size)
+ax.set_ylim(0, map_size)
 
-    # Update positions:
-    pos += vel * speed
+def animate(frame, boids, positions, velocities):
+    positions, velocities = flock(positions, velocities,
+                                  influence_prox = influence_slider.val,
+                                  speed = speed_slider.val,
+                                  map_size = map_size,
+                                  alignment_factor = alignment_slider.val,
+                                  cohesion_factor = cohesion_slider.val,
+                                  separation_factor = separation_slider.val)
+    boids.set_data(*positions.T)
 
-    # Bounce off walls...
-    # This has a slight bug of showing 1 ish frames with the boid off the
-    # screen when going to large x and y
-    vel[pos > map_size] = -vel[pos > map_size]
-    vel[pos + vel * speed < 0] = -vel[pos + vel * speed < 0]
+boids,  = plt.plot(*positions.T, '.')
 
-    # Get local boids:
-    distance = np.linalg.norm(pos - pos[:,None], axis=-1)
-    local = distance < influence_prox
+# Sliders for parmeters:
+ax_speed = plt.axes([0.3, 0.05, 0.4, 0.03])
+speed_slider = Slider(ax_speed, 'Speed', 0.01, 0.1, valinit=initial_speed)
+ax_speed.set_visible(False)
 
+ax_influence = plt.axes([0.3, 0.1, 0.4, 0.03])
+influence_slider = Slider(ax_influence, 'Influence Proximity', 0, 3,
+    valinit=inital_influence_prox)
 
-    # # Cohesion:
-    ##############
-    # Add a veolcity vector towards the COM:
-    local_coms = (np.dot(local, pos).T / (local.sum(axis=1) + 1e-8)).T
-    local_com_diff = local_coms - pos
-    cohesion_v = (local_com_diff * cohesion_factor)
+ax_alignment = plt.axes([0.3, 0.15, 0.4, 0.03])
+alignment_slider = Slider(ax_alignment, 'Alignment factor', 0, 0.5,
+    valinit=inital_alignment_factor)
 
-    # # Align:
-    #############
-    local_vel_avg = (np.dot(local, vel).T / (local.sum(axis=1) + 1e-8)).T
-    local_vel_diff = local_vel_avg - vel
-    align_v = (local_vel_diff * alignment_factor)
+ax_cohesion = plt.axes([0.3, 0.2, 0.4, 0.03])
+cohesion_slider = Slider(ax_cohesion, 'Cohesion factor', 0, 1,
+    valinit=inital_cohesion_factor)
 
-    # Drop Boids from their own local regions:
-    np.fill_diagonal(local, False)
-    # But ensure that they won't error out on a divide:
-    np.fill_diagonal(distance, 1)
+ax_separation = plt.axes([0.3, 0.25, 0.4, 0.03])
+separation_slider = Slider(ax_separation, 'Separation factor', 0, 0.2,
+    valinit=inital_separation_factor)
 
-    # # Separation:
-    ##############
-    # There might be a better way to do this, but at the moment
-    # I can't think of one...
-    relative_x = pos[:, 0] - pos[:, 0, None]
-    relative_y = pos[:, 1] - pos[:, 1, None]
-    relative_x_local = relative_x * local
-    relative_y_local = relative_y * local
+ax_speed.set_visible(slider_visible)
+ax_influence.set_visible(slider_visible)
+ax_alignment.set_visible(slider_visible)
+ax_cohesion.set_visible(slider_visible)
+ax_separation.set_visible(slider_visible)
 
-    test1 = relative_x_local / distance**2
-    test2 = relative_y_local / distance**2
-    # dividing by the distance converts to unit vectors, dividing again
-    # adds a inverse component, stronger at close distances
-
-    sep = -np.array([test1.sum(axis=1), test2.sum(axis=1)]).T
-    sep_v = (sep * separation_factor)
-
-    vel += cohesion_v + align_v + sep_v
-
-    # There has to be a better way of doing this bit, but this is speed
-    # setting, ensuring all boids have unit speed (otherwise things tend to
-    # stop)
-    for v in range(len(vel)):
-        vel[v, :] = vel[v, :] / np.linalg.norm(vel[v, :])
-
-    if debug:
-        return pos, vel, local, local_coms, local_vel_avg, local_com_diff, sep
-
-    return pos, vel
-
-# %%
-if MODE == 'DEBUG':
-    def onspace(event):
-        global positions
-        global velocities
-        plt.clf()
-        positions, velocities, local, local_coms, local_vel_avg, local_com_diff, sep = \
-            algo(positions, velocities, debug=True)
-
-        ##########
-        # Visuals:
-        ##########
-
-        # Other boids:
-        plt.scatter(*positions[~local[0], :].T, alpha=0.2)
-        plt.quiver(
-            *positions[~local[0], :].T,
-            *velocities[~local[0], :].T,
-            color='blue', alpha=0.2, width=0.01,
-            units='xy'
-        )
-
-        # Separation
-        plt.quiver(
-            *positions.T,
-            *sep.T,
-            color='red', alpha=0.2, width=0.01,
-            units='xy', scale = 1
-        )
-
-        # Local boids:
-        plt.scatter(*positions[local[0], :].T)
-        plt.quiver(
-            *positions[local[0], :].T,
-            *velocities[local[0], :].T,
-            color='blue', width=0.01,
-            units='xy'
-        )
-        local_rad = plt.Circle(positions[0, :], influence_prox, color='r',
-            alpha=0.2)
-        plt.gca().add_patch(local_rad)
-
-        # Centre of mass for boid of interest:
-        plt.scatter(*local_coms[0].T, color='green')
-
-        # Boid of interest:
-        plt.scatter(*positions[0, :])
-        plt.text(*positions[0, :],
-            f'{np.sqrt(velocities[0, 0]**2 + velocities[0, 1]**2):.2f}')
-
-        # Alignment:
-        plt.quiver(
-            *positions[0, :],
-            *local_vel_avg[0, :],
-            color='yellow', width=0.01,
-            units='xy', scale = 1
-        )
-
-        # Cohesion:
-        plt.quiver(
-            *positions[0, :],
-            *local_com_diff[0, :],
-            color='green', width=0.01,
-            units='xy', scale = 1
-        )
-
-        # Separation:
-        plt.quiver(
-            *positions[0, :],
-            *sep[0, :],
-            color='red', width=0.01,
-            units='xy', scale = 1
-        )
-
-        plt.xlim([0, map_size])
-        plt.ylim([0, map_size])
-        plt.gca().set_aspect('equal')
-
-        # plt.subplot(212)
-        # plt.hist(dirs , bins='auto', range=(-np.pi, np.pi))
-        plt.draw()
+def toggle_sliders(_):
+    global slider_visible
+    if slider_visible:
+        ax_speed.set_visible(False)
+        ax_influence.set_visible(False)
+        ax_alignment.set_visible(False)
+        ax_cohesion.set_visible(False)
+        ax_separation.set_visible(False)
+        slider_visible = False
+    else:
+        ax_speed.set_visible(True)
+        ax_influence.set_visible(True)
+        ax_alignment.set_visible(True)
+        ax_cohesion.set_visible(True)
+        ax_separation.set_visible(True)
+        slider_visible = True
 
 
-    # fig, ax = plt.subplots(2, 1)
-    fig, ax = plt.subplots(figsize=(7, 7))
-    fig.canvas.mpl_connect('key_press_event', onspace)
-    onspace(None)
-    plt.show()
+ax_toggle = plt.axes([0.01, 0.01, 0.1, 0.1])
+ax_toggle.axis('off')
+check = CheckButtons(ax_toggle, ['Show sliders'], [slider_visible])
+check.on_clicked(toggle_sliders)
 
-if MODE == 'REAL_TIME':
-    fig = plt.figure(figsize=(7, 7))
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.axis('off')
-    ax.set_xlim(0, map_size)
-    ax.set_ylim(0, map_size)
-
-    def animate(frame, boids, positions, velocities):
-        positions, velocities = algo(positions, velocities)
-        boids.set_data(*positions.T)
-
-    boids,  = plt.plot(*positions.T, '.')
-    anim = animation.FuncAnimation(
-        fig, animate, fargs=(boids, positions, velocities), interval=10,
-        blit=False
-    )
-    plt.show()
-
-if MODE == 'VSCODE_DEBUG':
-    positions += velocities * speed
-    # Bounce off walls...
-    # This has a slight bug of showing 1 ish frames with the boid off the
-    # screen when going to large x and y
-    velocities[positions > map_size] = -velocities[positions > map_size]
-    velocities[positions + velocities * speed < 0] = -velocities[positions + velocities * speed < 0]
-
-    # Get local boids:
-    distance = np.linalg.norm(positions - positions[:,None], axis=-1)
-    local = distance < influence_prox
-
-
-    # # Cohesion:
-    ##############
-    # Add a veolcity vector towards the COM:
-    local_coms = (np.dot(local, positions).T / (local.sum(axis=1) + 1e-8)).T
-    local_com_diff = local_coms - positions
-    cohesion_v = (local_com_diff * cohesion_factor)
-
-    # # Align:
-    #############
-    local_vel_avg = (np.dot(local, velocities).T / (local.sum(axis=1) + 1e-8)).T
-    local_vel_diff = local_vel_avg - velocities
-    align_v = (local_vel_diff * alignment_factor)
-
-    # Drop Boids from their own local regions:
-    np.fill_diagonal(local, False)
-
-    # But ensure that they won't error out on a divide:
-    np.fill_diagonal(distance, 1)
-
-    # # Separation:
-    ##############
-    relative_x = pos[:, 0] - pos[:, 0, None]
-    relative_y = pos[:, 1] - pos[:, 1, None]
-    relative_x_local = relative_x * local
-    relative_y_local = relative_y * local
-
-    test1 = relative_x_local / distance**2
-    test2 = relative_y_local / distance**2
-
-    sep = -np.array([test1.sum(axis=1), test2.sum(axis=1)]).T
-    sep_v = (sep * separation_factor)
-
-    velocities += cohesion_v + align_v + sep_v
-
-    #######
-    # DEBUG
-    #######
-
-    print(relative_x_local)
-    print(relative_y_local)
-
-
-
-    ##########
-    # Visuals:
-    ##########
-
-    # Other boids:
-    plt.scatter(*positions[~local[0], :].T, alpha=0.2)
-    plt.quiver(
-        *positions[~local[0], :].T,
-        *velocities[~local[0], :].T,
-        color='blue', alpha=0.2, width=0.01,
-        units='xy'
-    )
-
-    # Separation
-    plt.quiver(
-        *positions.T,
-        *sep.T,
-        color='red', alpha=0.2, width=0.01,
-        units='xy', scale = 1
-    )
-
-    # Local boids:
-    plt.scatter(*positions[local[0], :].T)
-    plt.quiver(
-        *positions[local[0], :].T,
-        *velocities[local[0], :].T,
-        color='blue', width=0.01,
-        units='xy'
-    )
-    local_rad = plt.Circle(positions[0, :], influence_prox, color='r',
-        alpha=0.2)
-    plt.gca().add_patch(local_rad)
-
-    # Centre of mass for boid of interest:
-    plt.scatter(*local_coms[0].T, color='green')
-
-    # Boid of interest:
-    plt.scatter(*positions[0, :])
-    plt.text(*positions[0, :],
-        f'{np.sqrt(velocities[0, 0]**2 + velocities[0, 1]**2):.2f}')
-
-    # Alignment:
-    plt.quiver(
-        *positions[0, :],
-        *local_vel_avg[0, :],
-        color='yellow', width=0.01,
-        units='xy', scale = 1
-    )
-
-    # Cohesion:
-    plt.quiver(
-        *positions[0, :],
-        *local_com_diff[0, :],
-        color='green', width=0.01,
-        units='xy', scale = 1
-    )
-
-    # Separation:
-    plt.quiver(
-        *positions[0, :],
-        *sep[0, :],
-        color='red', width=0.01,
-        units='xy', scale = 1
-    )
-
-    plt.xlim([0, map_size])
-    plt.ylim([0, map_size]) 
-    plt.gca().set_aspect('equal')
-
-    # plt.subplot(212)
-    # plt.hist(dirs , bins='auto', range=(-np.pi, np.pi))
-    plt.draw()
-# %%
+anim = animation.FuncAnimation(
+    fig, animate, fargs=(boids, positions, velocities), interval=10,
+    blit=False
+)
+plt.show()
