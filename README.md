@@ -5,8 +5,11 @@ type: project-readme
 # NumpyBoids
 An attempt at boids flocking without iterating over individual boids, but rather by using matrix math.
 
+![Demo gif of boids running](Demo.gif)
+
 # Bugs
 1. Speed vaiance has an impact on all the other factors due to method of implementation.
+   1. This is due to a higher speed reducing the number of times steps that the boids interact with eachother in. This can be fixed by inluding a multiplying the flocking forces by the speed (which is effectively the time step) so they remain relatively constant.
 
 
 # Improvements
