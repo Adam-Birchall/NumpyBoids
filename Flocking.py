@@ -102,7 +102,7 @@ def flock(pos, vel, speed=0.04, influence_prox=0.5, map_size = 20,
 
 def flock_forces(pos, vel, influence_prox=0.5, map_size = 20,
           alignment_factor = 0.1, cohesion_factor = 0.01,
-          separation_factor = 0.05):
+          separation_factor = 0.05, speed=None):
     """
     Main algo for update boid positions and velocitie
     pos being the 2 x Number of boids array of x and y boid centers
@@ -112,6 +112,8 @@ def flock_forces(pos, vel, influence_prox=0.5, map_size = 20,
     Rather than returning the posision and velocity of the boids, this
     func returns the forces acting on the boids. 
     This func does not update the positions or velocities
+
+    ALSO - speed variable not in use
     """
 
     # Bounce off walls...
