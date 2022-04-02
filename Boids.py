@@ -1,132 +1,191 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 """
-2022-02-19
-
-Boids
-Motion becomes a predictable swirl under some input params which I think is
-unavoidable
-The alighnment, cohesion andseparation are all handeled the in flock 
-function, in the Flocking file.
-
-Updated to use forces - Means that factors are constant over all speeds
+Rather than using matplot lib for the display, using pygame for display, 
+should be much quicker.
 """
 
 # %%
+import sys
+from turtle import position  # Only used for the dpi scaling of pygame on windows
 import numpy as np
+import pygame as pg
+from pygame.locals import *
 from Flocking import flock_forces
-from matplotlib import pyplot as plt
-from matplotlib import animation
-from matplotlib.widgets import Slider, CheckButtons
+
 
 # %%
-# Initialisation:
-inital_influence_prox = .5
+SCALE_FACTOR = 50
 
-map_size = 10
+# Boids init
 
-initial_speed = 0.002
-inital_alignment_factor = 0.008
-inital_cohesion_factor = 0.008
-inital_separation_factor = 0.001
+map_size = [20, 10]
+params = {
+    'speed': 0.005,
+    'influence_prox': 2,
+    'alignment_factor': 0.003,
+    'cohesion_factor': 0.003,
+    'separation_factor': 0.0005
+}
 
-fps = 30
+number_of_boids = 50
 
-number = 200
-positions = np.random.rand(number, 2) * map_size
-velocities = (np.random.rand(number, 2) * 2) - 1
+# pygame dimentions
+# width = 800
+# height = 800
+# Base the pygame dimetions off of the map size:
+width = SCALE_FACTOR * map_size[0]
+height = SCALE_FACTOR * map_size[1]
 
-slider_visible = False
+# Scaling on windows
+# If this is on a high or low res screen the window might be smaller or
+# larger respectively. Comment out the following for standard sizing.
+if sys.platform == 'win32':
+    print("Running on windows, if scale is weird check ~ lines 34")
+    import ctypes
+    try:
+       ctypes.windll.user32.SetProcessDPIAware()
+    except AttributeError:
+        pass # Windows XP doesn't support monitor scaling, so just do nothing.
+
 
 # %%
-fig = plt.figure(figsize=(5, 5))
-ax = fig.add_axes([0, 0, 1, 1])
-ax.axis('off')
-ax.set_xlim(0, map_size)
-ax.set_ylim(0, map_size)
+def draw(screen, particles):
+    for p in particles:
+        pg.draw.circle(screen, (100, 100, 200), p, 5)
+    pg.display.flip()
 
-def animate(frame, boids, meh):
-    global positions, velocities
-    dt = 1000/fps  # Interval of the matplotlib animation
-    # The above dt assumes that matplotlib can plot that fast, which is 
-    # likely not the case at higher fps (limit system dependent)
+
+def update(dt, positions, velocities, params):
     f1, f2, f3 = flock_forces(
         positions, velocities,
         map_size = map_size,
-        influence_prox = influence_slider.val,
-        alignment_factor = alignment_slider.val,
-        cohesion_factor = cohesion_slider.val,
-        separation_factor = separation_slider.val
+        **params
     )
     # Need to limit the speeds here somehow since the forces returned
     # don't limit speed
-
     velocities = velocities + (f1 + f2 + f3) * dt
-
     # There has to be a better way of doing this bit, but this is speed
     # setting, ensuring all boids have unit speed (otherwise things tend to
-    # stop)
+    # go rather crazy)
     for v in range(len(velocities)):
         velocities[v, :] = (velocities[v, :] / 
             np.linalg.norm(velocities[v, :]))
 
-    positions = positions + velocities * dt * speed_slider.val
-
-    boids.set_data(*positions.T)
-
-boids,  = plt.plot(*positions.T, '.')
-
-# Sliders for parmeters:
-ax_speed = plt.axes([0.3, 0.05, 0.4, 0.03])
-speed_slider = Slider(ax_speed, 'Speed', 0.001, 0.01, valinit=initial_speed)
-ax_speed.set_visible(False)
-
-ax_influence = plt.axes([0.3, 0.1, 0.4, 0.03])
-influence_slider = Slider(ax_influence, 'Influence Proximity', 0, 3,
-    valinit=inital_influence_prox)
-
-ax_alignment = plt.axes([0.3, 0.15, 0.4, 0.03])
-alignment_slider = Slider(ax_alignment, 'Alignment factor', 0.001, 0.01,
-    valinit=inital_alignment_factor)
-
-ax_cohesion = plt.axes([0.3, 0.2, 0.4, 0.03])
-cohesion_slider = Slider(ax_cohesion, 'Cohesion factor', 0.001, 0.01,
-    valinit=inital_cohesion_factor)
-
-ax_separation = plt.axes([0.3, 0.25, 0.4, 0.03])
-separation_slider = Slider(ax_separation, 'Separation factor', 0.001, 0.01,
-    valinit=inital_separation_factor)
-
-ax_speed.set_visible(slider_visible)
-ax_influence.set_visible(slider_visible)
-ax_alignment.set_visible(slider_visible)
-ax_cohesion.set_visible(slider_visible)
-ax_separation.set_visible(slider_visible)
-
-def toggle_sliders(_):
-    global slider_visible
-    if slider_visible:
-        ax_speed.set_visible(False)
-        ax_influence.set_visible(False)
-        ax_alignment.set_visible(False)
-        ax_cohesion.set_visible(False)
-        ax_separation.set_visible(False)
-        slider_visible = False
-    else:
-        ax_speed.set_visible(True)
-        ax_influence.set_visible(True)
-        ax_alignment.set_visible(True)
-        ax_cohesion.set_visible(True)
-        ax_separation.set_visible(True)
-        slider_visible = True
+    positions = positions + velocities * dt * params['speed']
+    return positions, velocities
 
 
-ax_toggle = plt.axes([0.01, 0.01, 0.1, 0.1])
-ax_toggle.axis('off')
-check = CheckButtons(ax_toggle, ['Show sliders'], [slider_visible])
-check.on_clicked(toggle_sliders)
+def render_text(screen, what, color, where):
+    font = pg.font.SysFont('monospace', 20)
+    text = font.render(str(what), 1, pg.Color(color))
+    screen.blit(text, where)
 
-anim = animation.FuncAnimation(
-    fig, animate, fargs=(boids, None), interval=1000/fps,
-    blit=False
-)
-plt.show()
+
+# %%
+def runPyGame():
+    pg.init()
+    pg.display.set_caption('Boids')
+
+    fps = 60.0
+
+    # Set up the window.
+    screen = pg.display.set_mode((width, height))
+    fpsClock = pg.time.Clock()
+    screen.fill((255, 255, 255))
+
+    # Set up boids
+    positions = np.random.rand(number_of_boids, 2) * map_size
+    velocities = (np.random.rand(number_of_boids, 2) * 2) - 1
+
+    text_toggles = True
+    dt = 1/fps
+    while True:
+        for event in pg.event.get():
+            if event.type == QUIT:
+                pg.quit() 
+                sys.exit()
+            if event.type == pg.KEYDOWN:
+                if event.key == pg.K_SPACE:
+                    text_toggles = not text_toggles
+            if event.type == pg.KEYUP:
+                # Speed
+                if event.key == pg.K_w:
+                    params['speed'] += 0.0005
+                if event.key == pg.K_q:
+                    params['speed'] -= 0.0005
+
+                # Influence Proximity
+                if event.key == pg.K_s:
+                    params['influence_prox'] += 0.0005
+                if event.key == pg.K_a:
+                    params['influence_prox'] -= 0.0005
+
+                # Alignment factor
+                if event.key == pg.K_r:
+                    params['alignment_factor'] += 0.0005
+                if event.key == pg.K_e:
+                    params['alignment_factor'] -= 0.0005
+                
+                # Cohesion
+                if event.key == pg.K_f:
+                    params['cohesion_factor'] += 0.0005
+                if event.key == pg.K_d:
+                    params['cohesion_factor'] -= 0.0005
+                
+                # Separation
+                if event.key == pg.K_y:
+                    params['separation_factor'] += 0.0005
+                if event.key == pg.K_t:
+                    params['separation_factor'] -= 0.0005
+
+
+        # Clear screen
+        screen.fill((255, 255, 255))
+
+        # Show prompts
+        render_text(screen, '[Space]: Show / hide variables',
+            (100, 100, 100), (10, height - 30))
+        if text_toggles:
+            render_text(
+                screen,
+                f'Speed:               {params["speed"]*10000:3.0f}'
+                '     [W / Q] Increment / decrement',
+                (100, 100, 100),
+                (10, height - 50)
+            )
+            render_text(
+                screen,
+                f'Influence Proximity: {params["influence_prox"]*100:3.0f}'
+                '     [S / A] Increment / decrement ',
+                (100, 100, 100),
+                (10, height - 70)
+            )
+            render_text(
+                screen,
+                f'Alignment factor:    {params["alignment_factor"]*10000:3.0f}'
+                '     [R / E] Increment / decrement ',
+                (100, 100, 100),
+                (10, height - 90)
+            )
+            render_text(
+                screen,
+                f'Cohesion factor:     {params["cohesion_factor"]*10000:3.0f}'
+                '     [F / D] Increment / decrement',
+                (100, 100, 100),
+                (10, height - 110)
+            )
+            render_text(
+                screen,
+                f'Separation factor:   {params["separation_factor"]*10000:3.0f}'
+                '     [Y / T] Increment / decrement',
+                (100, 100, 100),
+                (10, height - 130)
+            )
+
+        # Actual stuff
+        positions, velocities = update(dt, positions, velocities, params)
+        draw(screen, positions*SCALE_FACTOR)
+
+        dt = fpsClock.tick(fps)
+
+runPyGame()

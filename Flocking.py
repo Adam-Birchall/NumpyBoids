@@ -100,7 +100,7 @@ def flock(pos, vel, speed=0.04, influence_prox=0.5, map_size = 20,
 
 
 
-def flock_forces(pos, vel, influence_prox=0.5, map_size = 20,
+def flock_forces(pos, vel, influence_prox=0.5, map_size = (20, 20),
           alignment_factor = 0.1, cohesion_factor = 0.01,
           separation_factor = 0.05, speed=None):
     """
@@ -117,10 +117,18 @@ def flock_forces(pos, vel, influence_prox=0.5, map_size = 20,
     """
 
     # Bounce off walls...
-    vel[pos > map_size] = -vel[pos > map_size]
-    pos[pos > map_size] = map_size
+    # Vel X:
+    vel[pos[:, 0]> map_size[0], 0] = -vel[pos[:, 0]> map_size[0], 0]
+    # Vel Y:
+    vel[pos[:, 1]> map_size[1], 1] = -vel[pos[:, 1]> map_size[1], 1]
+
+    # Pos X & Y:
+    pos[pos[:, 0] > map_size[0], 0] = map_size[0]
+    pos[pos[:, 1] > map_size[1], 1] = map_size[1]
+
+    # Both miniums are 0 so this is easier:
     vel[pos < 0] = -vel[pos < 0]
-    pos[pos < 0] = 0  # Setting to 0 here makes some division errors...
+    pos[pos < 0] = 0
 
     # Wrapping works nicely: 
     # pos = pos % map_size
